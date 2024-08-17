@@ -2,8 +2,10 @@ package outbound
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"net/netip"
+	"os"
 	"time"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -11,7 +13,7 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-dns"
+	dns "github.com/sagernet/sing-dns"
 	"github.com/sagernet/sing/common/bufio"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
@@ -41,10 +43,20 @@ func NewDirect(router adapter.Router, logger log.ContextLogger, tag string, opti
 	}
 	outbound := &Direct{
 		myOutboundAdapter: myOutboundAdapter{
-			protocol:     C.TypeDirect,
-			network:      []string{N.NetworkTCP, N.NetworkUDP},
-			router:       router,
-			logger:       logger,
+			protocol: C.TypeDirect,
+			network:  []string{N.NetworkTCP, N.NetworkUDP},
+			router:   router,
+			logger:   logger,
+			slogger: slog.New(
+				slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+					ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+						if (a.Key == slog.TimeKey || a.Key == slog.LevelKey) && len(groups) == 0 {
+							return slog.Attr{} // remove excess keys
+						}
+						return a
+					},
+				}),
+			),
 			tag:          tag,
 			dependencies: withDialerDependency(options.DialerOptions),
 		},
@@ -159,6 +171,18 @@ func (h *Direct) NewConnection(ctx context.Context, conn net.Conn, metadata adap
 	if h.loopBack.CheckConn(metadata.Source.AddrPort(), M.AddrPortFromNet(conn.LocalAddr())) {
 		return E.New("reject loopback connection to ", metadata.Destination)
 	}
+	h.slogger.Info("new connection",
+		"inbound", metadata.Inbound,
+		"outbound", h.Tag(),
+		"user", metadata.User,
+		"transport", metadata.Network,
+		"protocol", metadata.Protocol,
+		"source_ip", metadata.Source.Addr,
+		"source_port", metadata.Source.Port,
+		"destination_ip", metadata.Destination.Addr,
+		"destination_hostname", metadata.Destination.Fqdn,
+		"destination_port", metadata.Destination.Port,
+	)
 	return NewConnection(ctx, h, conn, metadata)
 }
 
@@ -166,5 +190,17 @@ func (h *Direct) NewPacketConnection(ctx context.Context, conn N.PacketConn, met
 	if h.loopBack.CheckPacketConn(metadata.Source.AddrPort(), M.AddrPortFromNet(conn.LocalAddr())) {
 		return E.New("reject loopback packet connection to ", metadata.Destination)
 	}
+	h.slogger.Info("new packet connection",
+		"inbound", metadata.Inbound,
+		"outbound", h.Tag(),
+		"user", metadata.User,
+		"transport", metadata.Network,
+		"protocol", metadata.Protocol,
+		"source_ip", metadata.Source.Addr,
+		"source_port", metadata.Source.Port,
+		"destination_ip", metadata.Destination.Addr,
+		"destination_hostname", metadata.Destination.Fqdn,
+		"destination_port", metadata.Destination.Port,
+	)
 	return NewPacketConnection(ctx, h, conn, metadata)
 }

@@ -7,8 +7,10 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/netip"
+	"os"
 	"strings"
 
 	"github.com/sagernet/sing-box/adapter"
@@ -17,8 +19,8 @@ import (
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
 	"github.com/sagernet/sing-box/transport/wireguard"
-	"github.com/sagernet/sing-dns"
-	"github.com/sagernet/sing-tun"
+	dns "github.com/sagernet/sing-dns"
+	tun "github.com/sagernet/sing-tun"
 	"github.com/sagernet/sing/common"
 	E "github.com/sagernet/sing/common/exceptions"
 	M "github.com/sagernet/sing/common/metadata"
@@ -54,10 +56,20 @@ type WireGuard struct {
 func NewWireGuard(ctx context.Context, router adapter.Router, logger log.ContextLogger, tag string, options option.WireGuardOutboundOptions) (*WireGuard, error) {
 	outbound := &WireGuard{
 		myOutboundAdapter: myOutboundAdapter{
-			protocol:     C.TypeWireGuard,
-			network:      options.Network.Build(),
-			router:       router,
-			logger:       logger,
+			protocol: C.TypeWireGuard,
+			network:  options.Network.Build(),
+			router:   router,
+			logger:   logger,
+			slogger: slog.New(
+				slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+					ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+						if (a.Key == slog.TimeKey || a.Key == slog.LevelKey) && len(groups) == 0 {
+							return slog.Attr{} // remove excess keys
+						}
+						return a
+					},
+				}),
+			),
 			tag:          tag,
 			dependencies: withDialerDependency(options.DialerOptions),
 		},
@@ -232,9 +244,33 @@ func (w *WireGuard) ListenPacket(ctx context.Context, destination M.Socksaddr) (
 }
 
 func (w *WireGuard) NewConnection(ctx context.Context, conn net.Conn, metadata adapter.InboundContext) error {
+	w.slogger.Info("new connection",
+		"inbound", metadata.Inbound,
+		"outbound", w.Tag(),
+		"user", metadata.User,
+		"transport", metadata.Network,
+		"protocol", metadata.Protocol,
+		"source_ip", metadata.Source.Addr,
+		"source_port", metadata.Source.Port,
+		"destination_ip", metadata.Destination.Addr,
+		"destination_hostname", metadata.Destination.Fqdn,
+		"destination_port", metadata.Destination.Port,
+	)
 	return NewDirectConnection(ctx, w.router, w, conn, metadata, dns.DomainStrategyAsIS)
 }
 
 func (w *WireGuard) NewPacketConnection(ctx context.Context, conn N.PacketConn, metadata adapter.InboundContext) error {
+	w.slogger.Info("new packet connection",
+		"inbound", metadata.Inbound,
+		"outbound", w.Tag(),
+		"user", metadata.User,
+		"transport", metadata.Network,
+		"protocol", metadata.Protocol,
+		"source_ip", metadata.Source.Addr,
+		"source_port", metadata.Source.Port,
+		"destination_ip", metadata.Destination.Addr,
+		"destination_hostname", metadata.Destination.Fqdn,
+		"destination_port", metadata.Destination.Port,
+	)
 	return NewDirectPacketConnection(ctx, w.router, w, conn, metadata, dns.DomainStrategyAsIS)
 }

@@ -2,6 +2,7 @@ package outbound
 
 import (
 	"context"
+	"log/slog"
 	"net"
 	"net/netip"
 	"os"
@@ -11,7 +12,7 @@ import (
 	C "github.com/sagernet/sing-box/constant"
 	"github.com/sagernet/sing-box/log"
 	"github.com/sagernet/sing-box/option"
-	"github.com/sagernet/sing-dns"
+	dns "github.com/sagernet/sing-dns"
 	"github.com/sagernet/sing/common"
 	"github.com/sagernet/sing/common/buf"
 	"github.com/sagernet/sing/common/bufio"
@@ -26,6 +27,7 @@ type myOutboundAdapter struct {
 	network      []string
 	router       adapter.Router
 	logger       log.ContextLogger
+	slogger      *slog.Logger
 	tag          string
 	dependencies []string
 }
