@@ -15,6 +15,7 @@ import (
 	"github.com/sagernet/sing/common/json/badjson"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 var debugHTTPServer *http.Server
@@ -28,6 +29,7 @@ func applyDebugListenOption(options option.DebugOptions) {
 		return
 	}
 	r := chi.NewMux()
+	r.Handle("/metrics", promhttp.Handler())
 	r.Route("/debug", func(r chi.Router) {
 		r.Get("/gc", func(writer http.ResponseWriter, request *http.Request) {
 			writer.WriteHeader(http.StatusNoContent)
